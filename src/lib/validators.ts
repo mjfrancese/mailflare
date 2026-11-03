@@ -1,6 +1,8 @@
 import { z } from "zod";
+import { isPublicHttpsUrl, PUBLIC_HTTPS_URL_MESSAGE } from "@/lib/security/public-url";
 import { getEmailAddress, splitEmailAddressList } from "@/lib/email/address";
 import { DEFAULT_FOLDER_COLOR, FOLDER_COLOR_VALUES } from "@/lib/folders/colors";
+import { MAX_FOLLOW_UP_DAYS } from "@/lib/follow-ups/follow-up-utils";
 
 /**
  * Recipients arrive either as one comma-separated header string (the composer)
@@ -31,6 +33,8 @@ export const sendEmailSchema = z.object({
 	mailboxId: z.string().min(1).max(200),
 	scheduledAt: z.string().datetime().optional(),
 	undoSend: z.boolean().optional(),
+	trackOpens: z.boolean().optional(),
+	followUpDays: z.number().int().min(1).max(MAX_FOLLOW_UP_DAYS).optional(),
 	attachments: z
 		.array(
 			z.object({
@@ -276,7 +280,8 @@ export const routingRuleSchema = z.object({
 	mailboxId: z.string().min(1),
 	folderId: z.string().optional(),
 	destination: z.string().min(1).optional(),
-	forwardTo: z.string().email().optional(),
+	forwardTo: z.string().trim().email().optional(),
+	keepCopy: z.boolean().optional(),
 	priority: z.number().int().default(0),
 });
 
@@ -335,7 +340,7 @@ export const domainRoutingRuleSchema = z
 	});
 
 export const webhookSchema = z.object({
-	url: z.string().url().max(2048),
+	url: z.string().url().max(2048).refine(isPublicHttpsUrl, PUBLIC_HTTPS_URL_MESSAGE),
 	description: z.string().trim().max(200).optional(),
 	events: z
 		.array(z.enum(["message.inbound", "message.outbound", "message.failed"]))
@@ -345,7 +350,7 @@ export const webhookSchema = z.object({
 });
 
 export const webhookUpdateSchema = z.object({
-	url: z.string().url().max(2048).optional(),
+	url: z.string().url().max(2048).refine(isPublicHttpsUrl, PUBLIC_HTTPS_URL_MESSAGE).optional(),
 	description: z.string().trim().max(200).nullish(),
 	events: z
 		.array(z.enum(["message.inbound", "message.outbound", "message.failed"]))
