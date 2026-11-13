@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { MailPlus } from "@/components/icons";
+import { Loader2, MailPlus } from "@/components/icons";
 import { usePathname, useRouter } from "next/navigation";
 import { ComposeForm } from "@/components/compose/compose-form";
 import { useCompose } from "@/components/compose/compose-context";
@@ -82,9 +82,10 @@ function ComposeNoticeToast({ notice }: { notice: ComposeNotice }) {
 			aria-atomic="false"
 			className={cn(
 				"fixed right-6 top-6 z-[60] flex max-w-[calc(100vw-3rem)] items-center gap-4 rounded-lg px-4 py-3 text-sm font-medium text-white shadow-lg",
-				notice.tone === "error" ? "bg-red-600" : "bg-green-600",
+				notice.tone === "error" ? "bg-red-600" : notice.tone === "loading" ? "bg-neutral-800" : "bg-green-600",
 			)}
 		>
+			{notice.tone === "loading" && <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />}
 			<span className="min-w-0 break-words">
 				{parts ? (
 					<>
@@ -119,7 +120,7 @@ function ComposeNoticeToast({ notice }: { notice: ComposeNotice }) {
 
 /** `showButton` adds the phone Compose button; only the dashboard pages (mail) pass it. */
 export function FloatingComposer({ showButton = false }: { showButton?: boolean }) {
-	const { open, draftId, openComposer, closeComposer, notice } = useCompose();
+	const { open, draftId, initialTo, openComposer, closeComposer, notice } = useCompose();
 	const pathname = usePathname();
 	const router = useRouter();
 	const { t } = useLanguage();
@@ -129,7 +130,7 @@ export function FloatingComposer({ showButton = false }: { showButton?: boolean 
 			{showButton && !open && !mobileOpen && (
 				<button
 					type="button"
-					onClick={openComposer}
+					onClick={() => openComposer()}
 					aria-label={t("navigation.compose")}
 					className="fixed right-[max(1rem,env(safe-area-inset-right))] bottom-[max(1rem,env(safe-area-inset-bottom))] z-30 flex h-12 items-center gap-3 rounded-2xl bg-blue-100 px-5 text-base font-medium text-blue-950 shadow-sm transition-colors hover:bg-blue-200 active:bg-blue-200 md:hidden"
 				>
@@ -138,7 +139,7 @@ export function FloatingComposer({ showButton = false }: { showButton?: boolean 
 				</button>
 			)}
 			{notice && <ComposeNoticeToast key={notice.id} notice={notice} />}
-			{open && <ComposeForm key={draftId ?? "new"} mode="popup" draftIdToLoad={draftId} onClose={() => {
+			{open && <ComposeForm key={draftId ?? "new"} mode="popup" draftIdToLoad={draftId} initialTo={initialTo} onClose={() => {
 				closeComposer();
 				if (/^\/drafts\/[^/]+\/?$/.test(pathname)) router.replace("/drafts");
 			}} />}

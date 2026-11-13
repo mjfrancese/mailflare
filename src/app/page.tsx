@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { heroMessages, sidebarItems } from "./utils";
 import { Inbox, Mail, Search, ShieldCheck } from "@/components/icons";
 import { getServerTranslator } from "@/lib/i18n/server";
+import { getCurrentUser } from "@/lib/auth/cookies";
+import { getEnv } from "@/lib/cloudflare";
 import { LanguageSelector } from "@/components/language-selector";
 import { getHomeBranding } from "./home-server-utils";
 import { HomeAuthProvider } from "./home-auth";
@@ -20,11 +23,31 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function HomePage() {
-  const branding = await getHomeBranding();
-  const t = await getServerTranslator();
+  const [branding, t, sessionUser] = await Promise.all([
+    getHomeBranding(),
+    getServerTranslator(),
+    // A session lookup failure must not take down the public landing page.
+    getCurrentUser(getEnv()).catch(() => null),
+  ]);
+  // Signed-in users skip the landing page; the inbox restores their last-used mailbox.
+  if (sessionUser && !sessionUser.disabled) redirect("/inbox");
+
+  // Render the signed-in account from the server response so the header does not
+  // wait for hydration and an /api/auth/me round trip before showing it.
+  const initialUser = sessionUser
+    ? {
+        id: sessionUser.id,
+        email: sessionUser.email,
+        name: sessionUser.name,
+        role: sessionUser.role,
+        hasAvatar: !!sessionUser.avatarKey,
+        calendarEnabled: sessionUser.calendarEnabled,
+        driveEnabled: sessionUser.driveEnabled,
+      }
+    : null;
 
   return (
-    <HomeAuthProvider>
+    <HomeAuthProvider initialUser={initialUser}>
     <div className="min-h-dvh bg-[#f6f8fc] text-neutral-900">
       <header className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link

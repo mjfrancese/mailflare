@@ -3,6 +3,7 @@ import { getDb } from "@/db";
 import { driveItems, driveShares, driveUploadParts, users } from "@/db/schema";
 import { DRIVE_MAX_DEPTH, driveObjectKey } from "./utils";
 import type { DriveItemDto, DriveRole, DriveRow } from "./types";
+import { deleteUnreferencedObjects } from "@/lib/drive/shared-objects";
 
 type Db = ReturnType<typeof getDb>;
 
@@ -41,6 +42,9 @@ export async function getDriveRole(db: Db, userId: string, item: DriveRow, allow
 export async function getPublicDriveItem(db: Db, token: string, itemId?: string | null): Promise<{ root: DriveRow; item: DriveRow } | null> {
 	const [root] = await db.select().from(driveItems).where(eq(driveItems.linkToken, token)).limit(1);
 	if (!root || root.trashedAt) return null;
+	// A hidden Drive turns its shared links off too, so a blocked owner cannot use them either.
+	const [owner] = await db.select({ driveEnabled: users.driveEnabled }).from(users).where(eq(users.id, root.ownerId)).limit(1);
+	if (owner && !owner.driveEnabled) return null;
 	if (!itemId || itemId === root.id) return { root, item: root };
 	const item = await getDriveItem(db, itemId);
 	if (!item) return null;
@@ -100,8 +104,9 @@ export async function deleteDriveItems(env: CloudflareEnv, roots: DriveRow[]): P
 	const descendants = await collectDriveDescendants(db, roots.filter((row) => row.kind === "folder").map((row) => row.id));
 	const all = [...roots, ...descendants];
 	const keys = all.filter((row) => row.kind === "file").map((row) => row.r2Key ?? driveObjectKey(row.ownerId, row.id));
-	for (let index = 0; index < keys.length; index += 500) await env.BUCKET.delete(keys.slice(index, index + 500));
 	const ids = all.map((row) => row.id);
+	// A file saved from an email shares that attachment's object, which must outlive the Drive item.
+	await deleteUnreferencedObjects(env, db, keys, { driveItemIds: ids });
 	for (let index = 0; index < ids.length; index += 50) {
 		const slice = ids.slice(index, index + 50);
 		await db.delete(driveShares).where(inArray(driveShares.itemId, slice));

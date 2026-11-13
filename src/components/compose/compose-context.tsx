@@ -15,7 +15,8 @@ export type ComposeNoticePoll = {
 export type ComposeNoticeOptions = {
 	actions?: ComposeNoticeAction[];
 	parts?: SendNoticeParts;
-	tone?: "success" | "error";
+	/** `loading` shows a spinner and stays until the next notice replaces it. */
+	tone?: "success" | "error" | "loading";
 	durationMs?: number;
 	countdown?: { endAt: number };
 	/** Called once when the countdown reaches zero; the callback decides what replaces the toast. */
@@ -27,7 +28,9 @@ export type ComposeNoticeOptions = {
 type ComposeContextValue = {
 	open: boolean;
 	draftId: string | null;
-	openComposer: () => void;
+	/** Recipients the next fresh composer starts with, e.g. "Email contact" from the Contacts page. */
+	initialTo: string[] | null;
+	openComposer: (options?: { to?: string[] }) => void;
 	openDraftComposer: (draftId: string) => void;
 	closeComposer: () => void;
 	notice: ComposeNotice | null;
@@ -42,7 +45,7 @@ export type ComposeNotice = {
 	message: string;
 	parts?: SendNoticeParts;
 	actions: ComposeNoticeAction[];
-	tone: "success" | "error";
+	tone: "success" | "error" | "loading";
 	durationMs: number;
 	countdown?: { endAt: number };
 	onCountdownEnd?: () => void;
@@ -60,6 +63,7 @@ export function useCompose() {
 export function ComposeProvider({ children }: { children: ReactNode }) {
 	const [open, setOpen] = useState(false);
 	const [draftId, setDraftId] = useState<string | null>(null);
+	const [initialTo, setInitialTo] = useState<string[] | null>(null);
 	const opener = useRef<HTMLElement | null>(null);
 
 	function rememberOpener() {
@@ -83,19 +87,23 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
 			value={{
 				open,
 				draftId,
-				openComposer: () => {
+				initialTo,
+				openComposer: (options) => {
 					rememberOpener();
 					setDraftId(null);
+					setInitialTo(options?.to?.length ? options.to : null);
 					setOpen(true);
 				},
 				openDraftComposer: (nextDraftId) => {
 					if (!open) rememberOpener();
 					setDraftId(nextDraftId);
+					setInitialTo(null);
 					setOpen(true);
 				},
 				closeComposer: () => {
 					setOpen(false);
 					setDraftId(null);
+					setInitialTo(null);
 					const previous = opener.current;
 					opener.current = null;
 					if (previous) requestAnimationFrame(() => { if (previous.isConnected) previous.focus(); });
@@ -109,7 +117,7 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
 						parts: options?.parts,
 						actions: options?.actions ?? [],
 						tone: options?.tone ?? "success",
-						durationMs: options?.durationMs ?? 3200,
+						durationMs: options?.durationMs ?? (options?.tone === "loading" ? 120_000 : 3200),
 						countdown: options?.countdown,
 						onCountdownEnd: options?.onCountdownEnd,
 						poll: options?.poll,
